@@ -11,6 +11,7 @@ Usage:
 
 import datetime
 import math
+import os
 import random
 
 import chess
@@ -18,10 +19,10 @@ import chess.engine
 import chess.pgn
 
 STUDENT_COMMAND = ["python", "run.py"]
-GAMES = 40
+GAMES = 15
 STUDENT_MOVETIME = 0.5  # seconds per move for student
 STOCKFISH_MOVETIME = 0.1  # seconds per move for stockfish
-PGN_PATH = "elo_games.pgn"
+ELO_RUNS_DIR = "elo_runs"
 
 # Stockfish ELO clamp range
 SF_MIN_ELO = 1320
@@ -176,7 +177,12 @@ def main():
     student_rating = Rating()
     wins, draws, losses = 0, 0, 0
 
-    pgn_file = open(PGN_PATH, "w")
+    os.makedirs(ELO_RUNS_DIR, exist_ok=True)
+    pgn_path = os.path.join(
+        ELO_RUNS_DIR,
+        datetime.datetime.now().strftime("%Y-%m-%d-%H-%M") + ".pgn",
+    )
+    pgn_file = open(pgn_path, "w")
 
     for i in range(1, GAMES + 1):
         sf_elo = int(min(SF_MAX_ELO, max(SF_MIN_ELO, student_rating.mu)))
@@ -213,7 +219,7 @@ def main():
     print()
     print(f"Final rating: {student_rating.mu:.0f} (+/-{student_rating.phi:.0f})")
     print(f"Score: +{wins} ={draws} -{losses}")
-    print(f"Games saved to {PGN_PATH}")
+    print(f"Games saved to {pgn_path}")
 
 
 if __name__ == "__main__":
