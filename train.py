@@ -19,8 +19,6 @@ DATASET = "data"
 BATCH_SIZE = 256
 LR = 1e-3
 VALUE_LOSS_WEIGHT = 0.1
-FILTERS = 256
-RES_BLOCKS = 19
 SAVE_PATH = "model.pt"
 TIME_LIMIT = 5 * 60  # 5 minutes
 
@@ -30,7 +28,7 @@ def train():
     print(f"Device: {device}")
     print(f"Time limit: {TIME_LIMIT}s")
 
-    model = AlphaNet(filters=FILTERS, res_blocks=RES_BLOCKS).to(device)
+    model = AlphaNet().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 
     train_ds = ChessDataset(DATASET, split="train")

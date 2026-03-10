@@ -13,6 +13,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+
+FILTERS = 128
+RES_BLOCKS = 5
+VALUE_CHANNELS = 8
+VALUE_LIN_CHANNELS = 32
+POLICY_CHANNELS = 8
+
 # ---------------------------------------------------------------------------
 # Board encoding
 # ---------------------------------------------------------------------------
@@ -37,19 +44,27 @@ def board_to_tensor(board, flip):
 
     bitboards = np.array(
         [
-            board.kings & p1_occ, board.queens & p1_occ,
-            board.rooks & p1_occ, board.bishops & p1_occ,
-            board.knights & p1_occ, board.pawns & p1_occ,
-            board.kings & p2_occ, board.queens & p2_occ,
-            board.rooks & p2_occ, board.bishops & p2_occ,
-            board.knights & p2_occ, board.pawns & p2_occ,
+            board.kings & p1_occ,
+            board.queens & p1_occ,
+            board.rooks & p1_occ,
+            board.bishops & p1_occ,
+            board.knights & p1_occ,
+            board.pawns & p1_occ,
+            board.kings & p2_occ,
+            board.queens & p2_occ,
+            board.rooks & p2_occ,
+            board.bishops & p2_occ,
+            board.knights & p2_occ,
+            board.pawns & p2_occ,
         ],
         dtype=np.uint64,
     )
     if flip:
         bitboards = _flip_vertical(bitboards)
 
-    tensor[0:12] = np.unpackbits(bitboards.view(np.uint8), bitorder="little").reshape(12, 8, 8)
+    tensor[0:12] = np.unpackbits(bitboards.view(np.uint8), bitorder="little").reshape(
+        12, 8, 8
+    )
 
     if board.castling_rights & (chess.BB_H8 if flip else chess.BB_H1):
         tensor[12].fill(1.0)
@@ -119,7 +134,9 @@ def _flip_move(move):
 INDEX_TO_MOVE = _generate_uci_moves()
 INDEX_TO_FLIPPED_MOVE = [_flip_move(m) for m in INDEX_TO_MOVE]
 MOVE_TO_INDEX = {chess.Move.from_uci(m): i for i, m in enumerate(INDEX_TO_MOVE)}
-FLIPPED_MOVE_TO_INDEX = {chess.Move.from_uci(m): i for i, m in enumerate(INDEX_TO_FLIPPED_MOVE)}
+FLIPPED_MOVE_TO_INDEX = {
+    chess.Move.from_uci(m): i for i, m in enumerate(INDEX_TO_FLIPPED_MOVE)
+}
 assert len(INDEX_TO_MOVE) == 1880
 
 
@@ -158,8 +175,14 @@ class ResBlock(nn.Module):
 
 
 class AlphaNet(nn.Module):
-    def __init__(self, filters=256, res_blocks=19, policy_channels=64,
-                 value_channels=8, value_fc_hidden=256):
+    def __init__(
+        self,
+        filters=FILTERS,
+        res_blocks=RES_BLOCKS,
+        policy_channels=POLICY_CHANNELS,
+        value_channels=VALUE_CHANNELS,
+        value_fc_hidden=VALUE_LIN_CHANNELS,
+    ):
         super().__init__()
         self.convblock = nn.Sequential(
             nn.Conv2d(18, filters, 3, padding=1, bias=False),
@@ -193,7 +216,9 @@ class AlphaNet(nn.Module):
     @torch.no_grad()
     def evaluate(self, board):
         tensor = boards_to_tensor([board])
-        raw_policy, raw_value = self(torch.from_numpy(tensor).to(next(self.parameters()).device))
+        raw_policy, raw_value = self(
+            torch.from_numpy(tensor).to(next(self.parameters()).device)
+        )
         policy = legal_policy(raw_policy.cpu().numpy()[0], board)
         value = float(raw_value.cpu().numpy()[0, 0])
         return policy, value
