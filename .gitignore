@@ -3,3 +3,8 @@ __pycache__/
 
 # pytorch models
 *.pt
+
+# dataset
+report.json
+*.npz
+*.pgn
