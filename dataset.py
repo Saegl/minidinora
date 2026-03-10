@@ -16,6 +16,13 @@ from torch.utils.data import Dataset
 from model import MAX_HALFMOVES, policy_index
 
 # ---------------------------------------------------------------------------
+# Dataset size configuration
+# ---------------------------------------------------------------------------
+TRAIN_POSITIONS = 1_000_000
+VALIDATE_POSITIONS = 100_000
+CHUNK_SIZE = 100_000
+
+# ---------------------------------------------------------------------------
 # Compact board state (11 uint64 values) for efficient storage
 # ---------------------------------------------------------------------------
 
@@ -38,7 +45,9 @@ def _board_to_compact(board, flip):
         ],
         dtype=np.uint64,
     )
-    castling = chess.flip_vertical(board.castling_rights) if flip else board.castling_rights
+    castling = (
+        chess.flip_vertical(board.castling_rights) if flip else board.castling_rights
+    )
     if board.has_legal_en_passant():
         file, rank = divmod(board.ep_square, 8)
         if flip:
@@ -57,12 +66,24 @@ def _compact_to_tensor(array):
 
     bitboards = np.array(
         [
-            kings & p1, queens & p1, rooks & p1, bishops & p1, knights & p1, pawns & p1,
-            kings & p2, queens & p2, rooks & p2, bishops & p2, knights & p2, pawns & p2,
+            kings & p1,
+            queens & p1,
+            rooks & p1,
+            bishops & p1,
+            knights & p1,
+            pawns & p1,
+            kings & p2,
+            queens & p2,
+            rooks & p2,
+            bishops & p2,
+            knights & p2,
+            pawns & p2,
         ],
         dtype=np.uint64,
     )
-    tensor[0:12] = np.unpackbits(bitboards.view(np.uint8), bitorder="little").reshape(12, 8, 8)
+    tensor[0:12] = np.unpackbits(bitboards.view(np.uint8), bitorder="little").reshape(
+        12, 8, 8
+    )
 
     castling, ep, halfmove = int(array[-3]), int(array[-2]), array[-1]
     if castling & chess.BB_H1:
@@ -95,67 +116,79 @@ def _z_value(game, flip):
 # ---------------------------------------------------------------------------
 
 
-def convert_pgn(pgn_path, save_path):
-    boards, policies, z_values = [], [], []
-
-    with open(pgn_path, encoding="utf8", errors="ignore") as f:
-        game = chess.pgn.read_game(f)
-        while game:
-            if game.headers.get("Variant", "Standard") != "Standard":
-                game = chess.pgn.read_game(f)
-                continue
-
-            board = game.board()
-            for move in game.mainline_moves():
-                flip = not board.turn
-                boards.append(_board_to_compact(board, flip))
-                policies.append(policy_index(move, flip))
-                z_values.append(_z_value(game, flip))
-                board.push(move)
-
+def _iter_positions(pgn_dir):
+    """Yield (compact_board, policy, z) tuples from all PGNs in *pgn_dir*."""
+    for path in sorted(pathlib.Path(pgn_dir).rglob("*.pgn")):
+        with open(path, encoding="utf8", errors="ignore") as f:
             game = chess.pgn.read_game(f)
+            while game:
+                if game.headers.get("Variant", "Standard") != "Standard":
+                    game = chess.pgn.read_game(f)
+                    continue
 
+                board = game.board()
+                for move in game.mainline_moves():
+                    flip = not board.turn
+                    yield (
+                        _board_to_compact(board, flip),
+                        policy_index(move, flip),
+                        _z_value(game, flip),
+                    )
+                    board.push(move)
+
+                game = chess.pgn.read_game(f)
+
+
+def _flush_chunk(boards, policies, z_values, save_path):
     np.savez_compressed(
         save_path,
         boards=np.array(boards, dtype=np.uint64),
         policies=np.array(policies, dtype=np.int64),
         z_values=np.array(z_values, dtype=np.float32).reshape(-1, 1),
     )
-    return len(boards)
 
 
 def convert_dir(pgn_dir="pgns", save_dir="data"):
-    pgn_dir = pathlib.Path(pgn_dir)
     save_dir = pathlib.Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    chunks = {}
-    for path in sorted(pgn_dir.rglob("*.pgn")):
-        save_path = save_dir / (path.stem + ".npz")
-        count = convert_pgn(path, save_path)
-        print(f"{path.name}: {count} positions")
-        chunks[save_path.name] = count
+    target = TRAIN_POSITIONS + VALIDATE_POSITIONS
+    boards, policies, z_values = [], [], []
+    chunk_idx = 0
+    total = 0
+    report = {"train": {}, "val": {}}
 
-    total = sum(chunks.values())
-    train, val, test = {}, {}, {}
-    train_n, val_n = 0, 0
-    train_target = total * 0.8
-    val_target = total * 0.1
+    for compact, pol, z in _iter_positions(pgn_dir):
+        boards.append(compact)
+        policies.append(pol)
+        z_values.append(z)
+        total += 1
 
-    for name, n in chunks.items():
-        if train_n < train_target:
-            train[name] = n
-            train_n += n
-        elif val_n < val_target:
-            val[name] = n
-            val_n += n
-        else:
-            test[name] = n
+        if len(boards) >= CHUNK_SIZE:
+            name = f"chunk_{chunk_idx:04d}.npz"
+            _flush_chunk(boards, policies, z_values, save_dir / name)
+            split = "train" if total <= TRAIN_POSITIONS else "val"
+            report[split][name] = len(boards)
+            print(f"{name}: {len(boards)} positions ({split})")
+            boards, policies, z_values = [], [], []
+            chunk_idx += 1
+
+        if total >= target:
+            break
+
+    if boards:
+        name = f"chunk_{chunk_idx:04d}.npz"
+        _flush_chunk(boards, policies, z_values, save_dir / name)
+        split = "train" if total <= TRAIN_POSITIONS else "val"
+        report[split][name] = len(boards)
+        print(f"{name}: {len(boards)} positions ({split})")
 
     with open(save_dir / "report.json", "w") as f:
-        json.dump({"train": train, "val": val, "test": test}, f)
+        json.dump(report, f)
 
-    print(f"Total: {total} positions (train={train_n}, val={val_n}, test={total - train_n - val_n})")
+    train_n = sum(report["train"].values())
+    val_n = sum(report["val"].values())
+    print(f"Total: {total} positions (train={train_n}, val={val_n})")
 
 
 # ---------------------------------------------------------------------------
