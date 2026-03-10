@@ -11,13 +11,30 @@ minidinora/
   dataset.py  - PGN to training data conversion + PyTorch Dataset
   train.py    - Training loop
   run.py      - UCI protocol engine
+  elo.py      - Elo evaluation
 ```
 
 ## Usage
 
-### Create dataset from PGN files
+Install dependencies with `uv`
 
-Put `.pgn` files into `pgns/`, then:
+```bash
+uv sync
+```
+
+### Download PGN dataset
+
+Put `.pgn` files into `pgns/`  
+For example (Leela Standard Dataset)[https://lczero.org/blog/2018/09/a-standard-dataset/]  
+Download [ccrl-pgn.tar.bz2](http://storage.lczero.org/files/ccrl-pgn.tar.bz2) in your browser, then extract:
+
+```bash
+tar -xjf ccrl-pgn.tar.bz2 -C pgns/
+```
+
+Or (Lichess Elite Database)[https://database.nikonoel.fr/]
+
+### Create dataset from PGN files
 
 ```bash
 python dataset.py
@@ -29,6 +46,12 @@ python dataset.py
 python train.py
 ```
 
+### Calculate Elo rating
+
+```bash
+python elo.py
+```
+
 ### Run UCI engine
 
 ```bash
@@ -36,3 +59,4 @@ python run.py
 ```
 
 Then use standard UCI commands (`uci`, `isready`, `position`, `go`, `quit`).
+Or install UCI-compatible GUI like [cutechess](https://github.com/cutechess/cutechess)
