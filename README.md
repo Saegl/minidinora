@@ -25,14 +25,14 @@ uv sync
 ### Download PGN dataset
 
 Put `.pgn` files into `pgns/`  
-For example (Leela Standard Dataset)[https://lczero.org/blog/2018/09/a-standard-dataset/]  
+For example [Leela Standard Dataset](https://lczero.org/blog/2018/09/a-standard-dataset/)
 Download [ccrl-pgn.tar.bz2](http://storage.lczero.org/files/ccrl-pgn.tar.bz2) in your browser, then extract:
 
 ```bash
 tar -xjf ccrl-pgn.tar.bz2 -C pgns/
 ```
 
-Or (Lichess Elite Database)[https://database.nikonoel.fr/]
+Or [Lichess Elite Database](https://database.nikonoel.fr/)
 
 ### Create dataset from PGN files
 
