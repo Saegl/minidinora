@@ -8,3 +8,7 @@ __pycache__/
 report.json
 *.npz
 *.pgn
+
+# autoresearch
+results.tsv
+*.log
