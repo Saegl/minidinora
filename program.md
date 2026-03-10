@@ -17,8 +17,9 @@ To set up a new experiment, work with the user to:
    - `run.py` — UCI protocol engine. Do not modify.
    - `elo.py` — Elo evaluation harness. Do not modify.
 4. **Verify data exists**: Check that `data/report.json` exists and has the needed chunks. If not, tell the human to prepare the dataset.
-5. **Initialize results.tsv**: Create `results.tsv` with just the header row. The baseline will be recorded after the first run.
-6. **Confirm and go**: Confirm setup looks good.
+5. **Verify stockfish**: Check that `stockfish` is on PATH (`which stockfish`). If not, tell the human to install it.
+6. **Initialize results.tsv**: Create `results.tsv` with just the header row. The baseline will be recorded after the first run.
+7. **Confirm and go**: Confirm setup looks good.
 
 Once you get confirmation, kick off the experimentation.
 
@@ -36,6 +37,8 @@ Each experiment runs on a single GPU. The training script runs for a **fixed tim
 - Install new packages or add dependencies. You can only use what's already in `pyproject.toml`.
 
 **The goal is simple: get the highest Elo rating.** Since the training time budget is fixed, you don't need to worry about training time — it's always 5 minutes. Everything is fair game: change the architecture, the search algorithm, the optimizer, the hyperparameters, the batch size, the model size. The only constraint is that the code runs without crashing and finishes within the time budget.
+
+**Elo measurement is noisy and slow.** 15 games gives roughly +/-93 Elo uncertainty. A real +50 improvement can easily measure as -40 on a bad run. Keep this in mind — don't over-interpret small differences. The Elo evaluation also takes ~10 minutes, so you can skip it for experiments where `val_loss` clearly got worse (see quick-reject below).
 
 **VRAM** is a soft constraint. Some increase is acceptable for meaningful Elo gains, but it should not blow up dramatically.
 
@@ -116,11 +119,12 @@ LOOP FOREVER:
 3. git commit
 4. Run training: `uv run train.py > run.log 2>&1` (redirect everything — do NOT use tee or let output flood your context)
 5. Check training succeeded: `grep "^peak_vram_mb:" run.log`. If the grep output is empty, the training crashed. Run `tail -n 50 run.log` to read the stack trace and attempt a fix.
-6. Run Elo evaluation: `uv run elo.py > elo.log 2>&1`
-7. Read the results: `grep "^Final rating:" elo.log`
-8. Record the results in the TSV (NOTE: do not commit the results.tsv file, leave it untracked by git)
-9. If Elo improved (higher), you "advance" the branch, keeping the git commit
-10. If Elo is equal or worse, you git reset back to where you started
+6. **Quick-reject check**: Compare `val_loss` and `val_pacc` from the last epoch line against the baseline. If val_loss is clearly worse (e.g. significantly higher than baseline), skip the Elo evaluation — discard immediately and save ~10 minutes. Only proceed to Elo eval if training metrics look promising or ambiguous.
+7. Run Elo evaluation: `uv run elo.py > elo.log 2>&1`
+8. Read the results: `grep "^Final rating:" elo.log`
+9. Record the results in the TSV (NOTE: do not commit the results.tsv file, leave it untracked by git)
+10. If Elo improved (higher), you "advance" the branch, keeping the git commit
+11. If Elo is equal or worse, you git reset back to where you started
 
 The idea is that you are a completely autonomous researcher trying things out. If they work, keep. If they don't, discard. And you're advancing the branch so that you can iterate. If you feel like you're getting stuck in some way, you can rewind, but you should probably do this very sparingly (if ever).
 

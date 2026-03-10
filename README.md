@@ -14,6 +14,12 @@ minidinora/
   elo.py      - Elo evaluation
 ```
 
+## Requirements
+
+- Python 3.10+
+- NVIDIA GPU with CUDA
+- [Stockfish](https://stockfishchess.org/download/) binary on PATH (used by `elo.py`)
+
 ## Usage
 
 Install dependencies with `uv`
