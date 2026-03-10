@@ -106,7 +106,11 @@ def train():
         )
 
     elapsed = time.time() - start_time
+    print("---")
     print(f"Training finished: {epoch} epochs in {elapsed:.1f}s")
+    if torch.cuda.is_available():
+        peak_mb = torch.cuda.max_memory_allocated() / 1024 / 1024
+        print(f"peak_vram_mb: {peak_mb:.1f}")
     torch.save(model.state_dict(), SAVE_PATH)
     print(f"Saved weights to {SAVE_PATH}")
 
