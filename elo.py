@@ -11,6 +11,7 @@ Usage:
 
 import datetime
 import math
+import multiprocessing
 import os
 import random
 
@@ -19,9 +20,10 @@ import chess.engine
 import chess.pgn
 
 STUDENT_COMMAND = ["python", "run.py"]
-GAMES = 15
+NUM_PROCS = 3
+GAMES = 30
 STUDENT_MOVETIME = 0.5  # seconds per move for student
-STOCKFISH_MOVETIME = 0.1  # seconds per move for stockfish
+STOCKFISH_MOVETIME = 0.01  # seconds per move for stockfish
 ELO_RUNS_DIR = "elo_runs"
 
 # Stockfish ELO clamp range
@@ -148,13 +150,27 @@ def play_game(student, stockfish, student_is_white, game_ind, sf_elo, student_ra
         time=STOCKFISH_MOVETIME if student_is_white else STUDENT_MOVETIME
     )
 
+    student_nodes = []
+    sf_nodes = []
+    num_moves = 0
+
     while not board.outcome(claim_draw=True):
         if board.turn == chess.WHITE:
-            result = white_engine.play(board, white_limit)
+            result = white_engine.play(board, white_limit, info=chess.engine.INFO_ALL)
         else:
-            result = black_engine.play(board, black_limit)
+            result = black_engine.play(board, black_limit, info=chess.engine.INFO_ALL)
+
+        is_student_move = (board.turn == chess.WHITE) == student_is_white
+        nodes = result.info.get("nodes")
+        if nodes is not None:
+            if is_student_move:
+                student_nodes.append(nodes)
+            else:
+                sf_nodes.append(nodes)
+
         node = node.add_variation(result.move)
         board.push(result.move)
+        num_moves += 1
 
     result_str = board.result(claim_draw=True)
     game.headers["Result"] = result_str
@@ -164,61 +180,147 @@ def play_game(student, stockfish, student_is_white, game_ind, sf_elo, student_ra
     else:
         outcome = WIN if result_str == "0-1" else LOSS if result_str == "1-0" else DRAW
 
-    return outcome, game
+    stats = {
+        "num_moves": num_moves,
+        "avg_student_nodes": sum(student_nodes) / len(student_nodes)
+        if student_nodes
+        else 0,
+        "avg_sf_nodes": sum(sf_nodes) / len(sf_nodes) if sf_nodes else 0,
+    }
+
+    return outcome, game, stats
+
+
+def worker(
+    game_counter,
+    lock,
+    pgn_path,
+    shared_mu,
+    shared_phi,
+    shared_sigma,
+    shared_wins,
+    shared_draws,
+    shared_losses,
+    print_counter,
+):
+    student = open_engine(STUDENT_COMMAND)
+
+    while True:
+        with game_counter.get_lock():
+            i = game_counter.value
+            if i > GAMES:
+                break
+            game_counter.value += 1
+
+        with lock:
+            current_mu = shared_mu.value
+            current_phi = shared_phi.value
+            current_sigma = shared_sigma.value
+        student_rating = Rating(mu=current_mu, phi=current_phi, sigma=current_sigma)
+
+        sf_elo = int(min(SF_MAX_ELO, max(SF_MIN_ELO, student_rating.mu)))
+        stockfish = open_engine("stockfish", elo=sf_elo)
+        sf_rating = Rating(mu=sf_elo, phi=50.0)
+
+        student_is_white = random.choice([True, False])
+        outcome, game, stats = play_game(
+            student, stockfish, student_is_white, i, sf_elo, student_rating
+        )
+        stockfish.close()
+
+        with lock:
+            current_rating = Rating(
+                mu=shared_mu.value,
+                phi=shared_phi.value,
+                sigma=shared_sigma.value,
+            )
+            updated = _glicko2_update(current_rating, sf_rating, outcome)
+            shared_mu.value = updated.mu
+            shared_phi.value = updated.phi
+            shared_sigma.value = updated.sigma
+
+            with open(pgn_path, "a") as f:
+                print(game, file=f, end="\n\n")
+
+            if outcome == WIN:
+                tag = "Win"
+                shared_wins.value += 1
+            elif outcome == LOSS:
+                tag = "Loss"
+                shared_losses.value += 1
+            else:
+                tag = "Draw"
+                shared_draws.value += 1
+
+            display_num = print_counter.value
+            print_counter.value += 1
+
+            color = "W" if student_is_white else "B"
+            print(
+                f"Game {display_num}/{GAMES} [{color}]: {tag}  "
+                f"vs SF {sf_elo}  "
+                f"Rating: {updated.mu:.0f} (+/-{updated.phi:.0f})  "
+                f"Moves: {stats['num_moves']}  "
+                f"Nodes/move: student={stats['avg_student_nodes']:.0f} sf={stats['avg_sf_nodes']:.0f}",
+                flush=True,
+            )
+
+    student.close()
 
 
 def main():
     student = open_engine(STUDENT_COMMAND)
     student_name = student.id.get("name", "student")
+    student.close()
+
     print(f"Student: {student_name} ({STUDENT_MOVETIME}s/move)")
     print(f"Stockfish: {STOCKFISH_MOVETIME}s/move")
-    print(f"Games: {GAMES}")
-
-    student_rating = Rating()
-    wins, draws, losses = 0, 0, 0
+    print(f"Games: {GAMES}  Processes: {NUM_PROCS}")
 
     os.makedirs(ELO_RUNS_DIR, exist_ok=True)
     pgn_path = os.path.join(
         ELO_RUNS_DIR,
         datetime.datetime.now().strftime("%Y-%m-%d-%H-%M") + ".pgn",
     )
-    pgn_file = open(pgn_path, "w")
+    open(pgn_path, "w").close()
 
-    for i in range(1, GAMES + 1):
-        sf_elo = int(min(SF_MAX_ELO, max(SF_MIN_ELO, student_rating.mu)))
-        stockfish = open_engine("stockfish", elo=sf_elo)
-        sf_rating = Rating(mu=sf_elo, phi=50.0)
+    game_counter = multiprocessing.Value("i", 1)
+    shared_mu = multiprocessing.Value("d", MU)
+    shared_phi = multiprocessing.Value("d", PHI)
+    shared_sigma = multiprocessing.Value("d", SIGMA)
+    shared_wins = multiprocessing.Value("i", 0)
+    shared_draws = multiprocessing.Value("i", 0)
+    shared_losses = multiprocessing.Value("i", 0)
+    lock = multiprocessing.Lock()
 
-        student_is_white = random.choice([True, False])
-        outcome, game = play_game(
-            student, stockfish, student_is_white, i, sf_elo, student_rating
+    print_counter = multiprocessing.Value("i", 1)
+
+    procs = []
+    for _ in range(NUM_PROCS):
+        p = multiprocessing.Process(
+            target=worker,
+            args=(
+                game_counter,
+                lock,
+                pgn_path,
+                shared_mu,
+                shared_phi,
+                shared_sigma,
+                shared_wins,
+                shared_draws,
+                shared_losses,
+                print_counter,
+            ),
         )
-        stockfish.close()
+        p.start()
+        procs.append(p)
 
-        student_rating = _glicko2_update(student_rating, sf_rating, outcome)
-
-        print(game, file=pgn_file, end="\n\n", flush=True)
-
-        if outcome == WIN:
-            tag, wins = "Win", wins + 1
-        elif outcome == LOSS:
-            tag, losses = "Loss", losses + 1
-        else:
-            tag, draws = "Draw", draws + 1
-
-        color = "W" if student_is_white else "B"
-        print(
-            f"Game {i}/{GAMES} [{color}]: {tag}  "
-            f"vs SF {sf_elo}  "
-            f"Rating: {student_rating.mu:.0f} (+/-{student_rating.phi:.0f})"
-        )
-
-    student.close()
-    pgn_file.close()
+    for p in procs:
+        p.join()
 
     print()
-    print(f"Final rating: {student_rating.mu:.0f} (+/-{student_rating.phi:.0f})")
-    print(f"Score: +{wins} ={draws} -{losses}")
+    print(f"Final rating: {shared_mu.value:.0f} (+/-{shared_phi.value:.0f})")
+    print(f"Score: +{shared_wins.value} ={shared_draws.value} -{shared_losses.value}")
     print(f"Games saved to {pgn_path}")
 
 
