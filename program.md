@@ -38,7 +38,7 @@ Each experiment runs on a single GPU. The training script runs for a **fixed tim
 
 **The goal is simple: get the highest Elo rating.** Since the training time budget is fixed, you don't need to worry about training time — it's always 5 minutes. Everything is fair game: change the architecture, the search algorithm, the optimizer, the hyperparameters, the batch size, the model size. The only constraint is that the code runs without crashing and finishes within the time budget.
 
-**Elo measurement is noisy and slow.** 15 games gives roughly +/-93 Elo uncertainty. A real +50 improvement can easily measure as -40 on a bad run. Keep this in mind — don't over-interpret small differences. The Elo evaluation also takes ~10 minutes, so you can skip it for experiments where `val_loss` clearly got worse (see quick-reject below).
+**Elo measurement is noisy.** 30 games gives roughly +/-73 Elo uncertainty. A real +50 improvement can easily measure as -40 on a bad run. Keep this in mind — don't over-interpret small differences. The Elo evaluation takes ~5 minutes, so you can skip it for experiments where `val_loss` clearly got worse (see quick-reject below).
 
 **VRAM** is a soft constraint. Some increase is acceptable for meaningful Elo gains, but it should not blow up dramatically.
 
@@ -63,14 +63,14 @@ Then you run `uv run elo.py` which outputs:
 ```
 Student: minidinora (0.5s/move)
 Stockfish: 0.1s/move
-Games: 15
-Game 1/15 [W]: Loss  vs SF 1500  Rating: 1325 (+/-248)
-Game 2/15 [B]: Win   vs SF 1324  Rating: 1390 (+/-203)
+Games: 30
+Game 1/30 [W]: Loss  vs SF 1500  Rating: 1325 (+/-248)
+Game 2/30 [B]: Win   vs SF 1324  Rating: 1390 (+/-203)
 ...
-Game 15/15 [B]: Win  vs SF 1400  Rating: 1350 (+/-110)
+Game 30/30 [B]: Win  vs SF 1400  Rating: 1350 (+/-73)
 
 Final rating: 1350 (+/-110)
-Score: +8 =1 -6
+Score: +16 =2 -12
 Games saved to elo_runs/2026-03-10-23-15.pgn
 ```
 
@@ -80,7 +80,7 @@ The final Elo rating is the main metric. You can extract it from the log file:
 grep "^Final rating:" elo.log
 ```
 
-Note that the training script is configured to always stop after 5 minutes, so depending on the computing platform, the numbers might look different. The Elo evaluation takes around 8-12 minutes depending on game lengths.
+Note that the training script is configured to always stop after 5 minutes, so depending on the computing platform, the numbers might look different. The Elo evaluation takes around 5 minutes.
 
 ## Logging results
 
@@ -128,10 +128,10 @@ LOOP FOREVER:
 
 The idea is that you are a completely autonomous researcher trying things out. If they work, keep. If they don't, discard. And you're advancing the branch so that you can iterate. If you feel like you're getting stuck in some way, you can rewind, but you should probably do this very sparingly (if ever).
 
-**Timeout**: Each experiment takes ~5 minutes for training + ~10 minutes for Elo evaluation, so roughly 15-18 minutes total. If training exceeds 10 minutes, kill it and treat it as a failure (discard and revert).
+**Timeout**: Each experiment takes ~5 minutes for training + ~5 minutes for Elo evaluation, so roughly 10 minutes total. If training exceeds 10 minutes, kill it and treat it as a failure (discard and revert).
 
 **Crashes**: If a run crashes (OOM, or a bug, etc.), use your judgment: If it's something easy to fix (e.g. a typo, a missing import), fix it and re-run. If the idea itself is fundamentally broken, just skip it, log "crash" as the status in the TSV, and move on.
 
 **NEVER STOP**: Once the experiment loop has begun (after the initial setup), do NOT pause to ask the human if you should continue. Do NOT ask "should I keep going?" or "is this a good stopping point?". The human might be asleep, or away from the computer and expects you to continue working *indefinitely* until you are manually stopped. You are autonomous. If you run out of ideas, think harder — read deep learning and chess engine papers for inspiration, re-read the in-scope files for new angles, try combining previous near-misses, try more radical architectural changes. The loop runs until the human interrupts you, period.
 
-As an example use case, a user might leave you running while they sleep. If each experiment takes ~15 minutes then you can run roughly 4 per hour, for a total of about 30 over the duration of the average human sleep. The user then wakes up to experimental results, all completed by you while they slept!
+As an example use case, a user might leave you running while they sleep. If each experiment takes ~10 minutes then you can run roughly 6 per hour, for a total of about 48 over the duration of the average human sleep. The user then wakes up to experimental results, all completed by you while they slept!
