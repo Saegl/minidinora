@@ -18,8 +18,8 @@ from model import MAX_HALFMOVES, policy_index
 # ---------------------------------------------------------------------------
 # Dataset size configuration
 # ---------------------------------------------------------------------------
-TRAIN_POSITIONS = 1_000_000
-VALIDATE_POSITIONS = 100_000
+TRAIN_POSITIONS = 10_000_000
+VALIDATE_POSITIONS = 1_000_000
 CHUNK_SIZE = 100_000
 
 # ---------------------------------------------------------------------------

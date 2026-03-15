@@ -20,7 +20,7 @@ BATCH_SIZE = 256
 LR = 1e-3
 VALUE_LOSS_WEIGHT = 0.1
 SAVE_PATH = "model.pt"
-TIME_LIMIT = 5 * 60  # 5 minutes
+TIME_LIMIT = 15 * 60  # 5 minutes
 
 
 def train():
