@@ -1,6 +1,6 @@
 """
 Training loop for AlphaNet.
-Training is time-constrained: stops after TIME_LIMIT seconds (default 5 minutes).
+Training is time-constrained: stops after TIME_LIMIT seconds (default 15 minutes).
 
 Usage:
     python train.py
@@ -20,7 +20,7 @@ BATCH_SIZE = 256
 LR = 1e-3
 VALUE_LOSS_WEIGHT = 0.1
 SAVE_PATH = "model.pt"
-TIME_LIMIT = 15 * 60  # 5 minutes
+TIME_LIMIT = 15 * 60  # 15 minutes
 
 
 def train():
