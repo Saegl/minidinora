@@ -40,7 +40,7 @@ Each experiment runs on a single GPU. The training script runs for a **fixed tim
 
 **Elo measurement is noisy.** 30 games gives roughly +/-73 Elo uncertainty. A real +50 improvement can easily measure as -40 on a bad run. Keep this in mind — don't over-interpret small differences. The Elo evaluation takes ~5 minutes (7 minutes at worst), so you can skip it for experiments where `val_loss` clearly got worse (see quick-reject below).
 
-**VRAM** is a soft constraint. Some increase is acceptable for meaningful Elo gains, but it should not blow up dramatically.
+**VRAM** is not a meaningful constraint during training — the agent runs on a fast GPU (e.g. RTX 5090) with ample VRAM. However, the trained model must run on consumer GPUs, so **model size is hard-capped at 1 GB**. The training script enforces this at startup and will raise an error if the model exceeds the limit. Design architectures accordingly.
 
 **Simplicity criterion**: All else being equal, simpler is better. A small improvement that adds ugly complexity is not worth it. Conversely, removing something and getting equal or better results is a great outcome — that's a simplification win. When evaluating whether to keep a change, weigh the complexity cost against the improvement magnitude. A +10 Elo improvement that adds 20 lines of hacky code? Probably not worth it. A +0 Elo improvement from deleting code and simplifying? Definitely keep.
 

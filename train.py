@@ -29,6 +29,12 @@ def train():
     print(f"Time limit: {TIME_LIMIT}s")
 
     model = AlphaNet().to(device)
+
+    model_size_mb = sum(p.numel() * p.element_size() for p in model.parameters()) / 1024 / 1024
+    print(f"model_size_mb: {model_size_mb:.1f}")
+    if model_size_mb > 1024:
+        raise RuntimeError(f"Model size {model_size_mb:.1f} MB exceeds 1 GB hard limit for consumer GPU deployment")
+
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 
     train_ds = ChessDataset(DATASET, split="train")
