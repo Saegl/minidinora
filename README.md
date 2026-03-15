@@ -40,6 +40,14 @@ tar -xjf ccrl-pgn.tar.bz2 -C pgns/
 
 Or [Lichess Elite Database](https://database.nikonoel.fr/)
 
+### Prepare stockfish for elo evaluation
+
+```bash
+wget https://github.com/official-stockfish/Stockfish/releases/latest/download/stockfish-ubuntu-x86-64-avx2.tar
+tar -xvf stockfish-ubuntu-x86-64-avx2.tar
+mv stockfish/stockfish-ubuntu-x86-64-avx2 ./stockfishbin
+```
+
 ### Create dataset from PGN files
 
 ```bash

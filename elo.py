@@ -219,7 +219,7 @@ def worker(
         student_rating = Rating(mu=current_mu, phi=current_phi, sigma=current_sigma)
 
         sf_elo = int(min(SF_MAX_ELO, max(SF_MIN_ELO, student_rating.mu)))
-        stockfish = open_engine("stockfish", elo=sf_elo)
+        stockfish = open_engine(["./stockfishbin"], elo=sf_elo)
         sf_rating = Rating(mu=sf_elo, phi=50.0)
 
         student_is_white = random.choice([True, False])

@@ -12,3 +12,6 @@ report.json
 # autoresearch
 results.tsv
 *.log
+
+# stockfish
+stockfishbin
